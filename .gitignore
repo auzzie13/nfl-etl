@@ -1,0 +1,33 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+*.egg
+*.log
+
+# --- Virtual environments ---
+.venv/
+env/
+venv/
+
+# --- Data files ---
+raw/
+transformed/
+logs/
+
+# --- Docker ---
+.env
+docker-data/
+mysql_data/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- VS Code / IDEs ---
+.vscode/
+.idea/

@@ -1,0 +1,15 @@
+# --- Core NFL ETL pipeline ---
+nfl_data_py==0.3.3          # NFL data source
+pandas>=1.5,<2.0            # data cleaning/transformation, use pandas 1.x to satisfy nfl_data_py
+pyarrow>=12.0.1             # Parquet read/write support
+sqlalchemy>=2.0.20          # database ORM/connection layer
+pymysql>=1.1.1              # MySQL driver (used by SQLAlchemy)
+python-dotenv>=1.1.1        # manage secrets (DB creds) in .env
+prefect==2.*                # orchestration (scheduling, monitoring)
+
+# --- Optional ---
+pytest>=7.0                 # testing framework (unit/integration tests)
+#great_expectations>=1.31.0  # data quality validation
+black>=23.3                 # code formatter 
+flake8>=6.0                 # linting (catches bad style, unused vars, etc.)
+ipython>=8.0                # better interactive shell for debugging
