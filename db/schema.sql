@@ -1,7 +1,12 @@
-CREATE DATABASE IF NOT EXISTS nfl_dw;
+-- NFL Data Warehouse Schema
+-- Complete schema with staging tables and proper data types
+
+-- Drop database and recreate to avoid foreign key conflicts
+DROP DATABASE IF EXISTS nfl_dw;
+CREATE DATABASE nfl_dw;
 USE nfl_dw;
 
--- date dim
+-- Date dimension
 CREATE TABLE IF NOT EXISTS dim_date (
   date_key INT PRIMARY KEY,           -- YYYYMMDD e.g. 20240908
   date DATE NOT NULL,
@@ -14,7 +19,7 @@ CREATE TABLE IF NOT EXISTS dim_date (
   is_playoffs TINYINT
 );
 
--- teams
+-- Teams dimension
 CREATE TABLE IF NOT EXISTS dim_team (
   team_id INT PRIMARY KEY,
   team_name VARCHAR(100),
@@ -25,9 +30,9 @@ CREATE TABLE IF NOT EXISTS dim_team (
   active TINYINT DEFAULT 1
 );
 
--- players
-CREATE TABLE IF NOT EXISTS dim_player (
-  player_id INT PRIMARY KEY,
+-- Players dimension
+CREATE TABLE dim_player (
+  player_id VARCHAR(20) PRIMARY KEY,  -- Changed to VARCHAR to match NFL data
   first_name VARCHAR(100),
   last_name VARCHAR(100),
   full_name VARCHAR(200),
@@ -37,13 +42,15 @@ CREATE TABLE IF NOT EXISTS dim_player (
   weight_kg INT,
   active TINYINT DEFAULT 1,
   current_team_id INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX (last_name),
-  FOREIGN KEY (current_team_id) REFERENCES dim_team(team_id)
+  INDEX (position)
 );
 
--- games
-CREATE TABLE IF NOT EXISTS dim_game (
-  game_id BIGINT PRIMARY KEY,
+-- Games dimension
+CREATE TABLE dim_game (
+  game_id VARCHAR(20) PRIMARY KEY,    -- Changed to VARCHAR to match NFL data
   season SMALLINT,
   week TINYINT,
   game_date DATE,
@@ -53,14 +60,13 @@ CREATE TABLE IF NOT EXISTS dim_game (
   away_score INT,
   status VARCHAR(50),
   venue VARCHAR(128),
-  FOREIGN KEY (home_team_id) REFERENCES dim_team(team_id),
-  FOREIGN KEY (away_team_id) REFERENCES dim_team(team_id),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX(season, game_date)
 );
 
--- team game facts
-CREATE TABLE IF NOT EXISTS fact_team_game (
-  game_id BIGINT,
+-- Team game facts
+CREATE TABLE fact_team_game (
+  game_id VARCHAR(20),
   team_id INT,
   opponent_team_id INT,
   date_key INT,
@@ -72,46 +78,105 @@ CREATE TABLE IF NOT EXISTS fact_team_game (
   turnovers INT,
   time_of_possession_sec INT,
   win_flag TINYINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (game_id, team_id),
   INDEX(team_id, date_key)
 );
 
--- player game facts
-CREATE TABLE IF NOT EXISTS fact_player_game (
-  game_id BIGINT,
-  player_id INT,
+-- Player game facts
+CREATE TABLE fact_player_game (
+  game_id VARCHAR(20),
+  player_id VARCHAR(20),
   team_id INT,
   opponent_team_id INT,
   date_key INT,
-  snaps INT,
-  pass_attempts INT,
-  pass_completions INT,
-  pass_yards INT,
-  pass_tds INT,
-  rush_attempts INT,
-  rush_yards INT,
-  rush_tds INT,
-  receptions INT,
-  rec_yards INT,
-  rec_tds INT,
-  fumbles INT,
-  fantasy_points FLOAT,
+  snaps INT DEFAULT 0,
+  pass_attempts INT DEFAULT 0,
+  pass_completions INT DEFAULT 0,
+  pass_yards INT DEFAULT 0,
+  pass_tds INT DEFAULT 0,
+  interception INT DEFAULT 0,
+  rush_attempts INT DEFAULT 0,
+  rush_yards INT DEFAULT 0,
+  rush_tds INT DEFAULT 0,
+  receptions INT DEFAULT 0,
+  rec_yards INT DEFAULT 0,
+  rec_tds INT DEFAULT 0,
+  total_tds INT DEFAULT 0,
+  fumbles INT DEFAULT 0,
+  fantasy_points DECIMAL(6,2) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (game_id, player_id),
-  INDEX(player_id, date_key)
+  INDEX(player_id, date_key),
+  INDEX(game_id)
 );
 
--- staging raw pbp (store raw JSON or parquet meta)
-CREATE TABLE IF NOT EXISTS stg_raw_pbp (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  year SMALLINT,
-  raw_json JSON,
-  fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+-- Player injury facts (optional)
+CREATE TABLE fact_player_injury (
+  player_id VARCHAR(20),
+  season SMALLINT,
+  week TINYINT,
+  injury_type VARCHAR(100),
+  status VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX(player_id, season, week)
 );
 
--- pipeline metadata table
-CREATE TABLE IF NOT EXISTS meta_run_state (
+-- Staging table for players
+CREATE TABLE stg_players (
+  player_id VARCHAR(20),
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  full_name VARCHAR(200),
+  position VARCHAR(10),
+  birth_date DATE
+);
+
+-- Staging table for player game stats
+CREATE TABLE stg_player_game (
+  game_id VARCHAR(20),
+  player_id VARCHAR(20),
+  pass_attempts INT DEFAULT 0,
+  completions INT DEFAULT 0,
+  pass_yards INT DEFAULT 0,
+  pass_tds INT DEFAULT 0,
+  interception INT DEFAULT 0,
+  rush_attempts INT DEFAULT 0,
+  rush_yards INT DEFAULT 0,
+  rush_tds INT DEFAULT 0,
+  receptions INT DEFAULT 0,
+  rec_yards INT DEFAULT 0,
+  rec_tds INT DEFAULT 0,
+  total_tds INT DEFAULT 0,
+  fumbles INT DEFAULT 0
+);
+
+-- Staging table for injuries
+CREATE TABLE stg_injuries (
+  player_id VARCHAR(20),
+  season SMALLINT,
+  week TINYINT,
+  injury_type VARCHAR(100),
+  status VARCHAR(50)
+);
+
+-- Pipeline metadata table
+CREATE TABLE meta_run_state (
   pipeline_name VARCHAR(100) PRIMARY KEY,
   last_run_at DATETIME,
   last_game_date DATE,
-  notes TEXT
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- Performance indexes
+CREATE INDEX idx_fact_player_game_stats ON fact_player_game(pass_yards DESC, rush_yards DESC, rec_yards DESC);
+CREATE INDEX idx_fact_player_game_season ON fact_player_game(date_key);
+CREATE INDEX idx_player_position_active ON dim_player(position, active);
+
+-- Show all created tables
+SELECT 'Tables created successfully!' as status;
+SHOW TABLES;
